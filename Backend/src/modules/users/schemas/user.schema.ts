@@ -1,48 +1,85 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types } from 'mongoose';
+import { Document } from 'mongoose';
 
 export type UserDocument = User & Document;
 
-@Schema({ timestamps: true })
-export class User {
-  // auth
+@Schema({ _id: false })
+export class OAuthProvider {
+  @Prop({ required: true })
+  provider!: string; // "google" | "github"
 
-  @Prop({ required: true, unique: true, trim: true, lowercase: true })
+  @Prop({ required: true })
+  provider_user_id!: string;
+
+  @Prop()
   email!: string;
 
-  @Prop({ select: false })
-  password?: string;
+  @Prop({ default: () => new Date() })
+  linked_at!: Date;
+}
 
-  @Prop({
-    type: { googleId: { type: String, default: null } },
-    _id: false,
-  })
-  socialLink!: {
-    googleId: String | null;
-  };
-
-  // Information
-
-  @Prop({ required: true, trim: true })
+@Schema({
+  timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
+})
+export class User {
+  @Prop({ required: true, unique: true, index: true, trim: true })
   username!: string;
 
-  @Prop({ default: 'https://cdn.example.com/default-avatar.png' })
-  avatarUrl!: string;
+  @Prop({
+    required: true,
+    unique: true,
+    index: true,
+    lowercase: true,
+    trim: true,
+  })
+  email!: string;
 
-  @Prop({ default: '', maxLength: 150 })
-  bio!: string;
+  // null nếu user chỉ đăng nhập qua OAuth
+  @Prop({ select: false })
+  password!: string;
 
-  // status
+  @Prop({ required: true, trim: true })
+  full_name!: string;
 
+  @Prop()
+  phone?: string;
+
+  @Prop()
+  avatar_url?: string;
+
+  // OAuth
+  @Prop({ type: [OAuthProvider], default: [] })
+  oauth_providers!: OAuthProvider[];
+
+  // Trạng thái & presence
   @Prop({ default: false })
-  isOnline!: boolean;
+  is_online!: boolean;
 
-  @Prop({ default: null })
-  lastSeen!: Date;
+  @Prop()
+  last_seen?: Date;
 
-  // friend
-  @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })
-  friends!: Types.ObjectId[];
+  // Email verification / reset password
+  @Prop({ default: false })
+  email_verified!: boolean;
+
+  @Prop({ select: false })
+  reset_password_otp?: string; // mã OTP, nên hash trước khi lưu
+
+  @Prop()
+  reset_password_expires?: Date;
+
+  // AI gợi ý kết bạn
+  @Prop({ type: [Number], default: [] })
+  interests_embedding!: number[];
+
+  @Prop({ type: [String], default: [] })
+  interests_text!: string[];
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
+
+// Index bổ sung nếu cần query theo provider_user_id (vd: tìm user theo Google id)
+UserSchema.index({
+  'oauth_providers.provider': 1,
+  'oauth_providers.provider_user_id': 1,
+});
